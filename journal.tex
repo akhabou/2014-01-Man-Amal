@@ -1,0 +1,453 @@
+%\documentclass[final]{siamltex}
+\documentclass[a4paper]{article}
+\usepackage{amsmath,amssymb}
+\DeclareMathOperator{\Diag}{diag}
+\usepackage{algorithm,algpseudocode,algorithmicx}  % For pseudocode algorithms
+\usepackage{listings,url,verbatim}    % Could we do without listings?
+ 
+\usepackage{subfigure}
+\usepackage{longtable}
+\usepackage{lscape}
+\usepackage{multirow}
+\usepackage[pdftex]{graphicx}
+\usepackage{rotating}
+\usepackage{color}
+\usepackage{graphics}
+
+\newcommand{\lt}{\left}
+\newcommand{\rt}{\right}
+
+\newcommand\abs[1]{\lvert#1\rvert}
+\newcommand\norm[1]{\lVert#1\rVert}
+
+
+\title{Project $4$: On the generation of Random Orthogonal matrices and Random SVD}
+
+\author{Amal Khabou }
+%\thanks{ School of Mathematics, The University of
+%    Manchester, Manchester, M13 9PL, England.} ({\tt
+%    amal.khabou@manchester.ac.uk}).
+%\and Nick Higham \thanks{School of Mathematics, The University of
+%    Manchester, Manchester, M13 9PL, England.} ({\tt
+%    nhigham@manchester.ac.uk}). }
+
+\begin{document} 
+
+\maketitle
+
+\section{The problem to solve} 
+
+Random matrices is a topic that illustrates the deep and strong connections between numerical analysis and statistics 
+\cite{} (book in the email from Nick).
+
+For testing purposes we often need to form ``random SVD matrices'', i.e., matrices of the form $A = UDV^T$ , 
+where $U$ and $V$ are random orthogonal matrices and $D$ is diagonal with a 
+particular distribution of singular value on the diagonal.
+
+
+The real problem is how to compute $QB$, where $B$ is a given matrix and $Q$ 
+is a random orthogonal matrix. This is what MATLAB's gallery('qmult') does. 
+Once this problem is solved, the random SVD problem is an immediate corollary.
+qmult($B$) returns $QB$ where $Q$ is a random real orthogonal matrix from the 
+Haar distribution of dimension the number of rows in $B$. 
+qmult($B$, method), if the method is set to 1 it means that the computations 
+use a call to the QR factorization. This is implies more floating-point operations, 
+however numerical experiments show that this method is much faster for large dimensions.\\
+
+\textbf{Goal:} We aim at developing an efficient algorithm that only performs 
+$O(kn^2)$ floating point operations to generate random orthogonal matrices, instead of $O(n^3)$.
+
+%And indeed this is the problem that most often arises. For example, qmult is widely used for generating random matrices with particular structures \cite{Betcke:20%12:NCN}, \cite[Alg. 1]{nh_jortho}, and there are plenty of other applications of it.
+
+\section{Generating randsvd matrices}
+A randsvd matrix $A$ is given by $A = U \Sigma V^T$, where $U$ and $V$ are random orthogonal matrices and 
+$ \Sigma = diag(\sigma_i), (\sigma_i \geq 0)$ is formed by given singular values. Thus the problem of 
+generating randsvd matrices is reduced to the generation of random orthogonal matrices. In the following 
+we recall the two main methods in literature used to generate random orthogonal matrices.\\
+
+An ensemble of random matrices is defined by a matrix space and a probability measure on it.
+The set of $n \times n$ orthogonal matrices is a compact topoligical group.
+
+\paragraph{The Haar distribution \\}
+
+add a section for approximatelly Haar
+
+Some numerical applications require generation of uniformly distributed random orthogonal matrices. For 
+example, the Haar measure is essential to analyze the statistical behavior of the eigenvalues and the eigenvectors 
+of complex sample covariance matrices. Here the uniformity is 
+defined in terms of Haar measure, that means that the distribution is still unchanged if multiplied by any given orthogonal 
+matrix.  \\
+
+\textbf{Definition 1:}
+A measure $\mu(E)$ is a generalized volume defined on $E$. A measure $\mu$,
+defined on a group $G$, is a Haar measure if $\mu(gE) = \mu(E)$, for every $g \in G$.
+For the group $O(n)$ of orthogonal $n \times n$ matrices, the condition for this
+measure to be a Haar is that, for any continuous function $f$,\\
+
+$\int_{Q \in O(n)} f(Q) d_\mu(Q) = \int_{Q \in O(n)} f(Q_1Q) d_\mu(Q)$, for any $Q_1 \in  O(n)$.\\
+
+In other words, if $Q$ is a set of orthogonal matrices with probability
+$\mu$, then the sets $Q_1Q$ and $Q Q_1$ have the same probability $\mu$ for any $Q_1 \in  O(n)$.\\
+
+
+
+\textbf{Definition 2:}
+The probability measure $h_n$ defined on the Borel $\sigma$-field $\mathbb{B}_{on}$ of Borel subsets of 
+$\mathbb{O}_n$ is called Haar measure if, for any Borel set $A \in \mathbb{B}_{on}$ and orthogonal matrix 
+$\textbf{O} \in \mathbb{O}_{n}$ , $h_n(\textbf{O} A) = h_n(A)$, where $\textbf{O} A$ denotes the set of all 
+$\textbf{O} \textbf{A} $, $\textbf{A}  \in A$.\\
+
+The proofs of the following properties are detailed in \cite[Chapter 10]{bai2009spectral}.\\
+
+\textbf{Property 1:}
+If $\textbf{H}_n$ is $h_n$-distributed, then for any unit vector $x_n$, $y_n = \textbf{H}_nx_n$ 
+is uniformly distributed on the unit $n$-sphere.\\
+
+\textbf{Property 2:}
+If $\textbf{H}_n$ is $h_n$-distributed, then $\textbf{H}'_n$ is also $h_n$-distributed.\\
+
+\textbf{Property 3:}
+If $\textbf{Z}$ is a $n\times n$ matrix with entries iid $N(0,1)$, then $\textbf{U} = \textbf{Z}(\textbf{Z}′\textbf{Z})^{−1/2}$ 
+and $\textbf{V} = (\textbf{Z}\textbf{Z}')^{−1/2}\textbf{Z}$  are $h_n$-distributed.\\
+We note here that $\textbf{U}$ is the polar factor of $\textbf{Z}$.\\
+
+\textbf{Property 4:}
+Assume that on a common probability space, for each $n$, $\textbf{H}_n$  is $h_n$-distributed and $\textbf{x}_n$ is 
+a unit vector. Let $\textbf{y}_n = (y_1,\cdots , y_n)′ = \textbf{H}'_n\textbf{x}_n$ and $f$ a bounded continuous function. 
+Then, as $ n \to \infty$, 
+\begin{center}
+${{1}\over{n}} \sum_{j=1}^{n}f(\sqrt{n}y_j) \to \int f(x)\varphi(x)dx$, almost surely, \\
+\end{center}
+where $\varphi(x)$ is the density of $N(0,1)$.\\
+
+\textbf{Property 5:}
+
+The eigenvalues of a random orthogonal matrix, \{$e^{\theta_1},\ldots,e^{\theta_n}$\}, lie on the unit circle.
+A classical calculation in random matrix theory is the computation of the statistical correlations 
+between the arguments $\theta_i$ \cite{mehta2004random}. In \cite{ANU:298726} Mezzadri consider a simple 
+correlation function which consists of the density of the eigenvalues $\rho(\theta)$. He also 
+considers the spacing distribution which is the probability density of the normalized distance 
+between consecutive eigenvalues: \\
+
+ $s_j = {N \over {2\pi}} ({\theta_{j+1}} - {\theta_j}), j = 1, \ldots, N.$ \\
+
+In \cite{DiaconisSh94} the authors show that the trace of a random orthogonal matrix has an approximate 
+Gaussian distribution.
+
+\textbf{Asymptotic Haar:}
+
+\subsection{Using Householder transformations \\}
+
+
+
+\paragraph{Via standard QR factorization \\}
+
+Basically using Matlab notations one should start by generating an $n \times n$ random matrix, $A = randn(A)$ 
+then performs its QR factorization to get a random orthogonal matrix $Q$. 
+Here we present similar experiments to those presented in \cite[section 4.6]{ANU:298726} to get 
+an intuition on whether the random orthogonal matrix generated follows the Haar distribution or not. \\
+
+The QR factorization as implemented in Matalab and elsewhere does not guarantee that the diagonal 
+entries of the $R$ factor are nonnegative. Thus the obtained $Q$ factor is not guaranteed to be a Haar distributed 
+orthogonal matrix.
+
+\begin{figure}[!htb]
+%\centering
+\includegraphics[scale=.7]{matlabQR.eps}
+\caption{The data are computed from the eigenvalues of ten thousand 
+$50\times 50$ random orthogonal matrices output of Matlab QR function.}
+\label{fig:0}
+\end{figure}
+
+\paragraph{The Stewart's method \\}
+A Householder transformation is a symmetric orthogonal matrix of the form,\\
+$H = I - {{uu^T} \over { \norm{u}_2^2}}$.
+The standard algorithm used by LAPACK and MATLAB's gallery('randsvd') is based on an algorithm of 
+Stewart \cite{stewart1980efficient} for generating random orthogonal matrices from the Haar distribution. 
+It constructs $Q$ as a product of random Householder transformations. Basically the randsvd routine calls the 
+qmult method which pre-multiplies a given matrix $A$ (the matrix of singular values in this particular case) with $Q$ 
+a random real orthogonal matrix from the Haar distribution. We note that the qmult method does not form the matrix $Q$ 
+explicitly. To generate a random orthogonal matrix one can apply the qmult method to the identity matrix.
+Below is a description of the algorithm proposed by Stewart and implemented in the qmult function:\\
+for $i = 2$ to $n$
+\begin{itemize}
+\item generate a vector $u$ with $i$ entries, each element is an independent normal $(0; 1)$
+random number.
+\item let $x$ be an $n$-vector, where the $n-i$ first entries are zero and the rest is set to $u$.
+\item let $H$ be an $n \times n$ Householder transformation which reduces $x$ to a vector where
+the only nonzero element is the $(n-i+1)$-th element.
+\item apply the Householder transformation $H$ to $A$ : $A =  A H$
+\end{itemize}
+endfor\\
+for $i = 1$ to $n$
+\begin{itemize}
+\item multiply the $i$-th column of $A$ by an independent random number $1$ or $-1$ with probability $1/2$ (is uniformly distributed on the unit circle)
+\end{itemize}
+endfor \\
+
+This method is implemented by the $G05PXF$ routine in NAG Library. \\
+
+\begin{figure}[!htb]
+%\centering
+\includegraphics[scale=.7]{qmult.eps}
+\caption{The data are computed from the eigenvalues of ten thousand 
+$50\times 50$ random orthogonal matrices output of qmult function.}
+\label{fig:qmult}
+\end{figure}
+
+Fran'idea: we start from a diagonal matrix $D$ where the eigenvalues are uniformally distributed 
+on the unit circle. Then we apply successive Householder transformations to $D$.
+Basically we generate a matrix \\
+ $Q = H_{n-1}\ldots H_k \ldots H_1 D H_1 \ldots H_k \ldots H_{n-1}$, 
+where  \\
+$D  = diag
+ \begin{pmatrix}
+  \begin{pmatrix}
+  a_i & b_i  \\
+  -b_i & a_i 
+ \end{pmatrix}
+ \end{pmatrix}
+$
+
+
+\textbf{Comparison:}
+The following figures show the density of the phases of $10000$ matrices 
+of size $50 \times 50$ using an increasing number of Householder transformations. 
+
+\begin{itemize}
+
+\item Product of Householder transformations
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{qmult_1.eps}
+\caption{One Householder transformation.}
+\label{fig:1}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{qmult_2.eps}
+\caption{Two Householder transformation.}
+\label{fig:2}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{qmult_3.eps}
+\caption{Three Householder transformation.}
+\label{fig:3}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{qmult_25.eps}
+\caption{$25$ Householder transformation.}
+\label{fig:25}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{qmult_35.eps}
+\caption{$35$ Householder transformation.}
+\label{fig:35}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{qmult_40.eps}
+\caption{$40$ Householder transformation.}
+\label{fig:40}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{qmult_45.eps}
+\caption{$45$ Householder transformation.}
+\label{fig:45}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{qmult_45.eps}
+\caption{$45$ Householder transformation.}
+\label{fig:45}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{qmult_49.eps}
+\caption{$49$ Householder transformation.}
+\label{fig:49}
+\end{figure}
+
+We can see from the previous figures that when we decrease the number of applied Householder 
+transformations, the density the angle $0$ increases, it means that the multiplicity of real 
+eigenvalues increases, in particular $1$ and $-1$ since the matrix is orthogonal and all the 
+eigenvalues lie in the unit circle. According to some numerical experiments, it is the multiplicity 
+of $1$ which increases when the number of Householder transformation decreases.
+We note that in all the figures, the blue line represents a theoretical uniform density of the 
+angels $\theta$, thus $\rho(\theta) =  {1 \over {2 \pi}}$. 
+If we consider the application of $k$ Householder transformations $H_1 \ldots H_k$, we note 
+$Q_k = H_1H_2 \ldots H_k$ their product. The question is basically what is the distribution 
+of $Q_k$ and how close it is to be Haar distributed. If $Q_k$ is explicitly required then 
+the process cost is $O(kn^2)$. 
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{eig1multiplicity.eps}
+\caption{The multiplicity of $1$ for a $20 \times 20$ matrix.}
+\label{fig:multiplicity}
+\end{figure}
+
+
+\item Householder transformations applied to the diagonal matrix $D$ defined in the previous section
+
+
+\begin{figure}[!htb]
+%\centering
+\includegraphics[scale=.9]{Diag_H1.eps}
+\caption{The data are computed from the eigenvalues of ten thousand 
+$50\times 50$ random orthogonal matrices applying one Householder transformation to $D$.}
+\label{fig:qmult}
+\end{figure}
+
+\begin{figure}[!htb]
+%\centering
+\includegraphics[scale=.9]{Diag_H5.eps}
+\caption{The data are computed from the eigenvalues of ten thousand 
+$50\times 50$ random orthogonal matrices applying $5$ Householder transformations to $D$.}
+\label{fig:qmult}
+\end{figure}
+
+\begin{figure}[!htb]
+%\centering
+\includegraphics[scale=.9]{Diag_H48.eps}
+\caption{The data are computed from the eigenvalues of ten thousand 
+$50\times 50$ random orthogonal matrices applying $48$ ($n-2$) Householder transformations to $D$.}
+\label{fig:qmult}
+\end{figure}
+
+\end{itemize}
+
+\paragraph{Using Givens rotations (Anderson et al's method)\cite{doi:10.1137/0908055} \\}
+The Anderson, Olkin and Underhill algorithm constructs the random orthogonal matrix $Q$ as 
+a product of Givens rotations.\\
+
+$Q = G_{1,2}G_{1,3} \ldots G_{1,n}G_{2,3} \ldots G_{2,n} \ldots G_{n-1,n} D,$\\
+
+where $D$ is a diagonal matrix with random entries and $G_{i,j}$ Givens rotations.
+This algorithm has the same time complexity as the Stewart's method. The main difficulty 
+of this method is the generation of the angles.\\
+
+{\color{red}To Do: finish the Matlab code for (Anderson et al's method) using the hints provided in \cite{Genz_methodsfor}.}
+\paragraph{Comparison \\}
+ 
+
+Note that the same process can be applied to generate a random symmetric matrix $A = Q \Lambda Q^T$ with a given eigenvalue distribution.
+
+$Q$ here is an orthogonal Hessenberg matrix.
+
+\section{Some ideas from LAPACK working note 9 \cite{lawn09}}
+The method of interest consist on the generation of either a real symmetric or complex Hermitian 
+matrix with given eigenvalues and bandwidth, or a random non symmetric or complex symmetric matrix
+with given singular values and upper and lower bandwidth. The simplest way is described in details 
+in \cite[section 3]{lawn09} (xLATMS routine). Basically starting from a random matrix $A$, its diagonal $D$ 
+is set to the desired eigenvalues or singular values. The obtained matrix is first pre and post-multiplied 
+by random orthogonal matrices. Then Householder transformations are applied to eliminate nonzero entries 
+outside the specified bandwidth. The cost of this algorithm is $O(n^3)$, which could be improved to $O(n^2k)$ 
+using Givens rotations, where $k$ is the specified bandwidth. This method is described in details in
+ \cite[section 9.2]{lawn09} in the case of the generation of an upper triangular band matrix.\\
+
+{\color{red}To Do: I should look at how the random orthogonal matrices used in the xLATMS routine are 
+generated when Householder transformations are used to generate a random band matrix. \\}
+
+{\color{red}To Do: I need to see to which extent it is possible to apply some techniques from 
+\cite{Ballard:2012:CAS:2370036.2145822} (Avoiding Communication in successive Band Reduction) to 
+efficiently generate random band matrices with specified eigenvalues or singular values.}
+
+\section{Investigation of the ideas proposed by Nick}
+
+\subsection{Using Cayley transform}
+The Cayley transform is a mapping between skew-symmetric matrices and special orthogonal matrices.
+To generate an orthogonal matrix $Q$, we consider a skew-symmetric matrix $A$, that is $A^T = −A$. 
+Then $I + A$ is invertible, and the Cayley transform $Q = (I - A)(I + A)^{-1}$ is an orthogonal matrix.
+The question to answer is how to choose $S$ and which distribution should it have to make $Q$ an 
+orthogonal matrix from the Haar distribution.
+
+To illustrate the density of the angles corresponding to the eigenvalues of a sample of $10000$ matrices 
+of size $50$, we generate skew symmetric matrices as follows, $A = randn(n)$ and $B = A - A^T$ is the 
+skew symmetric matrix used in the Caley transform.
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{caley_50_randn.eps}
+\caption{Empirical histograms of the density of the eigenvalues using Caley transform.}
+\label{fig:caley1}
+\end{figure}
+
+In figure \ref{fig:caley2}, the skew symmetric matrix $B$ is generated using the following Matlab 
+code, $c =randn(n-1,1);$ $d = zeros(n,1);$ $B = gallery('tridiag',c,d,-c)$.
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{caley_50_tridiag.eps}
+\caption{Empirical histograms of the density of the eigenvalues using Caley transform from tridiag matrix.}
+\label{fig:caley2}
+\end{figure}
+
+\subsection{Taking selected rows from an orthogonal matrix-Using sparse embedding}
+The abstract of the talk suggested by Nick: Sketching methods could be summarized as follows: a sketch of a 
+matrix $A$ is its product $SA$ with a sketching matrix $S$, where $S$ is chosen so that $SA$ behaves likes A, 
+in the sense that for all vectors $x$, $\norm{SAx}$ is about the same as $\norm{Ax}$. From this *subspace 
+embedding* property follows a number of applications where $SA$ can be used in place of $A$, and yield provably 
+good appropriate solutions. When $S$ has a small number of rows, so does the sketch $SA$, and using $SA$ in 
+place of $A$ results in fast approximation algorithms.\\
+
+How could this be applied in the context of random orthogonal matrices??
+
+\subsection{Using the exponential of a skew symmetric matrix}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{expm_50_randn.eps}
+\caption{Empirical histograms of the density of the eigenvalues using matrix exponential.}
+\label{fig:expm1}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[scale=.7]{expm_50_tridiag.eps}
+\caption{Empirical histograms of the density of the eigenvalues using matrix exponential (tridiag).}
+\label{fig:expm2}
+\end{figure}
+
+\section{Some applications which might be interesting}
+Random orthogonal matrices are used to randomize integration methods for n-dimensional 
+integrals over spherically symmetric integration regions \cite{Genz_methodsfor}.
+In Stewart paper, one of the applications is the estimation of the condition number of a general matrix.  
+\subsection{The generation of correlation matrices}
+The algorithms introduced by Higham and Davies in \cite{Davies00numericallystable} present a numerically stable way to 
+generate correlation matrices with a given spectrum. The difference with previous implementations \cite{lin_Bendel85,FNAG} 
+consists on the way the angles used for the Givens rotations are computed. However the most expensive step 
+for those algorithms is still the generation of random orthogonal matrices, which the authors assume that 
+they should be Haar distributed and hence use Stewart algorithm to generate them. We note also that 
+there is no attention given to the statistical distribution of the generated matrices.
+So the main question is again how to efficiently generate a random orthogonal matrix. 
+
+\subsection{Random orthogonal matrix simulation}
+
+ROM simulation method is a fast matrix method for generating random samples using 
+random orthogonal matrices. It has applications to any problem where historical 
+simulation is commonly applied.
+
+
+
+\bibliographystyle{siam}
+{
+\bibliography{randsvd}
+}
+
+\end{document} 
+
+
